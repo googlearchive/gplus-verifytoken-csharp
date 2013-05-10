@@ -1,0 +1,1 @@
+﻿<%@ WebHandler Language="C#" CodeBehind="verifytoken.ashx.cs" Class="VerifyToken.VerifyToken" %>
