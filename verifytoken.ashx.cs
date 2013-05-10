@@ -63,15 +63,15 @@ namespace VerifyToken
         /// </summary>
         /// <param name="context">Contains the request and response.</param>
         public void ProcessRequest(HttpContext context)
-        {            
+        
             // Get the code from the request POST body.
-            string accessToken = context.Request.Params["access_token"];                 
+            string accessToken = context.Request.Params["access_token"]
             string idToken = context.Request.Params["id_token"];
 
             // Return if we don't have the required parameters.
             if (idToken == null || accessToken == null)
             {
-                context.Response.StatusCode = 200;
+                context.Response.StatusCode = 401;
                 context.Response.StatusDescription = "Empty parameters";
                 return;
             }
@@ -97,13 +97,13 @@ namespace VerifyToken
             tokeninfo_request.Access_token = accessToken;
 
             // Use Google as a trusted provider to validate the token.
-            // Invalid values, including expired tokens, return 400 
+            // Invalid values, including expired tokens, return 40
             // BAD REQUEST and throw an exception.
             var tokeninfo = tokeninfo_request.Fetch();
             if (
               // Verify that the id token's user id matches the token user ID
               gplus_id == tokeninfo.User_id
-                  
+
               // Verify the token is for this app
               && tokeninfo.Issued_to == CLIENT_ID
  
