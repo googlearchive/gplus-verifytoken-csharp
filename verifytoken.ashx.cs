@@ -62,10 +62,10 @@ namespace VerifyToken
         /// Processes the request based on the path.
         /// </summary>
         /// <param name="context">Contains the request and response.</param>
-        public void ProcessRequest(HttpContext context)
+        public void ProcessRequest(HttpContext context){
         
             // Get the code from the request POST body.
-            string accessToken = context.Request.Params["access_token"]
+            string accessToken = context.Request.Params["access_token"];
             string idToken = context.Request.Params["id_token"];
 
             // Return if we don't have the required parameters.
