@@ -15,6 +15,7 @@ This demo verifies an OAuth v2 access token and parses an OAuth v2 ID token.
 4. Open your browser to: 
 
     http://localhost:4567/verifytoken.ashx?access_token=[YOUR_ACCESS_TOKEN]&id_token=[YOUR_ID_TOKEN]
+
 5. The app will return JSON representing whether each token is valid. For example:
 
     {
@@ -28,3 +29,4 @@ This demo verifies an OAuth v2 access token and parses an OAuth v2 ID token.
           "gplus_id":null,
           "message":""}
     }
+
