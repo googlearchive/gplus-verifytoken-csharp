@@ -69,7 +69,7 @@ namespace VerifyToken
     public class VerifyToken : IHttpHandler, IRequiresSessionState, IRouteHandler
     {
         // Get this from your app at https://code.google.com/apis/console
-        private string CLIENT_ID = "268858962829.apps.googleusercontent.com";
+        private string CLIENT_ID = "YOUR_CLIENT_ID";
 
         // Values returned in the response
         access_token_status ats = new access_token_status();
