@@ -33,8 +33,6 @@ using System.Web.Routing;
 using System.Web.SessionState;
 
 // Generated libraries for Google APIs
-using System.Net;
-using System.Web;
 using Google.Apis.Authentication.OAuth2;
 using Google.Apis.Authentication.OAuth2.DotNetOpenAuth;
 using Google.Apis.Oauth2.v2;
