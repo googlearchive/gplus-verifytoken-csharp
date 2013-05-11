@@ -33,12 +33,23 @@ using System.Web.Routing;
 using System.Web.SessionState;
 
 // Generated libraries for Google APIs
+using System.Net;
+using System.Web;
 using Google.Apis.Authentication.OAuth2;
 using Google.Apis.Authentication.OAuth2.DotNetOpenAuth;
 using Google.Apis.Oauth2.v2;
 using Google.Apis.Oauth2.v2.Data;
 using Google.Apis.Util;
 
+// For token verification
+using Microsoft.IdentityModel.Tokens.JWT;
+using Microsoft.IdentityModel.Tokens;
+
+using System.Collections;
+using System.IdentityModel.Tokens;
+using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 // For OAuth2
 using DotNetOpenAuth.Messaging;
 using DotNetOpenAuth.OAuth2;
@@ -51,12 +62,18 @@ namespace VerifyToken
     /// <summary>
     ///  This is a minimal implementation of OAuth V2 verification that
     ///  demonstrates:
-    ///    - Token validation
+    ///    - ID Token validation
+    ///    - Access token validation
     /// </summary>
     /// @author class@google.com (Gus Class)
     public class VerifyToken : IHttpHandler, IRequiresSessionState, IRouteHandler
     {
-        private string CLIENT_ID = "YOUR_CLIENT_ID";
+        // Get this from your app at https://code.google.com/apis/console
+        private string CLIENT_ID = "268858962829.apps.googleusercontent.com";
+
+        // Values returned in the response
+        access_token_status ats = new access_token_status();
+        id_token_status its = new id_token_status();
 
         /// <summary>
         /// Processes the request based on the path.
@@ -68,59 +85,164 @@ namespace VerifyToken
             string accessToken = context.Request.Params["access_token"];
             string idToken = context.Request.Params["id_token"];
 
-            // Return if we don't have the required parameters.
-            if (idToken == null || accessToken == null)
+            // Validate the ID token
+            if (idToken != null)
             {
-                context.Response.StatusCode = 401;
-                context.Response.StatusDescription = "Empty parameters";
-                return;
-            }
+                JWTSecurityToken token = new JWTSecurityToken(idToken);
+                JWTSecurityTokenHandler jwt = new JWTSecurityTokenHandler();
 
-            string[] segments = idToken.Split('.');
+                // Configure validation
+                Byte[][] certBytes = getCertBytes();
+                for (int i = 0; i < certBytes.Length; i++)
+                {
+                    X509Certificate2 certificate = new X509Certificate2(certBytes[i]);
+                    X509SecurityToken certToken = new X509SecurityToken(certificate);
 
-            string base64EncoodedJsonBody = segments[1];
-            int mod4 = base64EncoodedJsonBody.Length % 4;
-            if ( mod4 > 0 )
-            {
-                base64EncoodedJsonBody += new string( '=', 4 - mod4 );
+                    // Set up token validation 
+                    TokenValidationParameters tvp = new TokenValidationParameters();
+                    tvp.AllowedAudience = CLIENT_ID;
+                    tvp.SigningToken = certToken;
+                    tvp.ValidIssuer = "accounts.google.com";
+
+                    // Enable / disable tests                
+                    tvp.ValidateNotBefore = false;
+                    tvp.ValidateExpiration = true;
+                    tvp.ValidateSignature = true;
+                    tvp.ValidateIssuer = true;
+
+                    // Account for clock skew. Look at current time when getting the message
+                    // "The token is expired" in try/catch block.
+                    // This is relative to GMT, for example, GMT-8 is:
+                    tvp.ClockSkewInSeconds = 3600 * 13;
+
+                    try
+                    {
+                        // Validate using the provider
+                        ClaimsPrincipal cp = jwt.ValidateToken(token, tvp);
+                        if (cp != null)
+                        {
+                            its.valid = true;
+                            its.message = "";
+                        }
+                    }
+                    catch (Exception e)
+                    {
+                        // Multiple certificates are tested.
+                        if (its.valid != true)
+                        {
+                            its.message = e.Message;
+                        }
+                        if (e.Message.IndexOf("The token is expired") > 0)
+                        {
+                            // TODO: Check current time in the exception for clock skew.
+                        }
+                    }
+                }
+
+                // Get the Google+ id for this user from the "sub" claim.
+                Claim[] claims = token.Claims.ToArray<Claim>();
+                for (int i = 0; i < claims.Length; i++)
+                {
+                    if (claims[i].Type.Equals("sub"))
+                    {
+                        its.gplus_id = claims[i].Value;
+                    }
+                }
             }
-            byte[] encodedBodyAsBytes =
-                System.Convert.FromBase64String(base64EncoodedJsonBody);
-            string json_body =
-                System.Text.Encoding.UTF8.GetString(encodedBodyAsBytes);
-            IDTokenJsonBodyObject bodyObject =
-                JsonConvert.DeserializeObject<IDTokenJsonBodyObject>(json_body);
-            string gplus_id = bodyObject.sub;
 
             // Use Tokeninfo to validate the user and the client.
             var tokeninfo_request = new Oauth2Service().Tokeninfo();
             tokeninfo_request.Access_token = accessToken;
 
             // Use Google as a trusted provider to validate the token.
-            // Invalid values, including expired tokens, return 40
-            // BAD REQUEST and throw an exception.
-            var tokeninfo = tokeninfo_request.Fetch();
-            if (
-              // Verify that the id token's user id matches the token user ID
-              gplus_id == tokeninfo.User_id
+            // Invalid values, including expired tokens, return 400
+            Tokeninfo tokeninfo = null;
+            try
+            {
+                tokeninfo = tokeninfo_request.Fetch();
+                if (
+                    // Verify the token is for this app
+                  tokeninfo.Issued_to == CLIENT_ID
 
-              // Verify the token is for this app
-              && tokeninfo.Issued_to == CLIENT_ID
- 
-              // Verify the token hasn't expired
-              && tokeninfo.Expires_in > 0
-            )
-            {
-                // Success
-                context.Response.StatusCode = 200;
+                  // Verify the token hasn't expired
+                  && tokeninfo.Expires_in > 0
+                )
+                {
+                    ats.valid = true;
+                    ats.gplus_id = tokeninfo.User_id;
+                }
             }
-            else
+            catch (Exception stve)
             {
-                // The credentials did not match.
-                context.Response.StatusCode = 401;
-                return;
+                ats.message = stve.Message;
             }
+
+            context.Response.StatusCode = 200;
+            context.Response.Write("{\n    \"access_token_status\":" + JsonConvert.SerializeObject(ats) + ",\n    \"id_token_status\":" +
+                JsonConvert.SerializeObject(its) + "\n}\n");
         }
+
+
+        // Used for string parsing the Certificates from Google
+        private const string beginCert = "-----BEGIN CERTIFICATE-----\\n";
+        private const string endCert = "\\n-----END CERTIFICATE-----\\n";
+
+        /// <summary>
+        /// Retrieves the certificates for Google and returns them as byte arrays.
+        /// </summary>
+        /// <returns>An array of byte arrays representing the Google certificates.</returns>
+        public byte[][] getCertBytes()
+        {
+            // The request will be made to the authentication server.
+            WebRequest request = WebRequest.Create(
+                "https://www.googleapis.com/oauth2/v1/certs"
+            );
+
+            StreamReader reader = new StreamReader(request.GetResponse().GetResponseStream());
+
+            string responseFromServer = reader.ReadToEnd();
+            
+            String[] split = responseFromServer.Split(':');
+
+            // There are two certificates returned from Google
+            byte[][] certBytes = new byte[2][];
+            int index = 0;
+            UTF8Encoding utf8 = new UTF8Encoding();
+            for (int i = 0; i < split.Length; i++)
+            {
+                if (split[i].IndexOf(beginCert) > 0)
+                {                  
+                    int startSub = split[i].IndexOf(beginCert);
+                    int endSub = split[i].IndexOf(endCert) + endCert.Length;
+                    certBytes[index] = utf8.GetBytes(split[i].Substring(startSub, endSub).Replace("\\n", "\n"));
+                    index++;
+                }
+            }
+            return certBytes;
+        }
+
+
+        /// <summary>
+        /// Stores the result data for the ID token verification.
+        /// </summary>
+        class id_token_status
+        {
+            public Boolean valid = false;
+            public String gplus_id = null;
+            public String message = "";
+        }
+
+        /// <summary>
+        /// Stores the result data for the access token verification.
+        /// </summary>
+        class access_token_status
+        {
+            public Boolean valid = false;
+            public String gplus_id = null;
+            public String message = "";
+        }
+
+
 
         /// <summary>
         /// Implements IRouteHandler interface for mapping routes to this
@@ -138,20 +260,5 @@ namespace VerifyToken
         }
 
         public bool IsReusable { get { return false; } }
-    }
-
-    /// <summary>
-    /// Encapsulates JSON data for ID token body.
-    /// </summary>
-    public class IDTokenJsonBodyObject
-    {
-        public string iss;
-        public string aud;
-        public string at_hash;
-        public string azp;
-        public string c_hash;
-        public string sub;
-        public int iat;
-        public int exp;
     }
 }
