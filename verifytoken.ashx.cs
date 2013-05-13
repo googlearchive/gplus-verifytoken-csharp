@@ -69,7 +69,7 @@ namespace VerifyToken
     public class VerifyToken : IHttpHandler, IRequiresSessionState, IRouteHandler
     {
         // Get this from your app at https://code.google.com/apis/console
-        private string CLIENT_ID = "YOUR_CLIENT_ID";
+        static public string CLIENT_ID = "YOUR_CLIENT_ID";
 
         // Values returned in the response
         access_token_status ats = new access_token_status();
@@ -122,7 +122,7 @@ namespace VerifyToken
                         if (cp != null)
                         {
                             its.valid = true;
-                            its.message = "";
+                            its.message = "Valid ID Token.";
                         }
                     }
                     catch (Exception e)
@@ -130,7 +130,7 @@ namespace VerifyToken
                         // Multiple certificates are tested.
                         if (its.valid != true)
                         {
-                            its.message = e.Message;
+                            its.message = "Invalid ID Token.";                           
                         }
                         if (e.Message.IndexOf("The token is expired") > 0)
                         {
@@ -160,26 +160,27 @@ namespace VerifyToken
             try
             {
                 tokeninfo = tokeninfo_request.Fetch();
-                if (
-                    // Verify the token is for this app
-                  tokeninfo.Issued_to == CLIENT_ID
-
-                  // Verify the token hasn't expired
-                  && tokeninfo.Expires_in > 0
-                )
-                {
+                if (tokeninfo.Issued_to != CLIENT_ID){
+                    ats.message = "Access Token not meant for this app.";
+                }else{
                     ats.valid = true;
+                    ats.message = "Valid Access Token.";
                     ats.gplus_id = tokeninfo.User_id;
                 }
             }
             catch (Exception stve)
-            {
-                ats.message = stve.Message;
+            {                
+                ats.message = "Invalid Access Token.";
             }
 
+            // Use the wrapper to return JSON
+            token_status_wrapper tsr = new token_status_wrapper();
+            tsr.id_token_status = its;
+            tsr.access_token_status = ats;
+
             context.Response.StatusCode = 200;
-            context.Response.Write("{\n    \"access_token_status\":" + JsonConvert.SerializeObject(ats) + ",\n    \"id_token_status\":" +
-                JsonConvert.SerializeObject(its) + "\n}\n");
+            context.Response.ContentType = "text/json";
+            context.Response.Write(JsonConvert.SerializeObject(tsr));
         }
 
 
@@ -242,7 +243,11 @@ namespace VerifyToken
             public String message = "";
         }
 
-
+        class token_status_wrapper
+        {
+            public id_token_status id_token_status = null;
+            public access_token_status access_token_status = null;
+        }
 
         /// <summary>
         /// Implements IRouteHandler interface for mapping routes to this
