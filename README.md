@@ -29,11 +29,11 @@ All tokens need to be verified on your server unless you know that they came dir
 3. Click the run/play icon to start the program.
 4. Open your browser to: 
 
-    http://localhost:1234/verifytoken.ashx?access_token=[YOUR_ACCESS_TOKEN]&id_token=[YOUR_ID_TOKEN]
+    http://localhost:4567/verifytoken.ashx?access_token=[YOUR_ACCESS_TOKEN]&id_token=[YOUR_ID_TOKEN]
 
 or
 
-    http://localhost:1234/default.ashx
+    http://localhost:4567/default.ashx
 
 ## Alternatives
 
