@@ -4,6 +4,7 @@ This demo verifies an OAuth v2 access token and parses an OAuth v2 ID token.
 
 ## Requirements ##
 * Visual Studio 2012 or later
+* .NET 4.5
 
 ## Usage ##
 1. Open the VerifyTokenDemo solution.
