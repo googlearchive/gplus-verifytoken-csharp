@@ -33,7 +33,7 @@ All tokens need to be verified on your server unless you know that they came dir
 
 or
 
-    http://localhost:4567/default.ashx
+    http://localhost:4567/default.aspx
 
 ## Alternatives
 
