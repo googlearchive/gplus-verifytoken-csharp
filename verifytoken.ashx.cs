@@ -15,44 +15,28 @@
  */
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.IdentityModel.Tokens;
 using System.IO;
 using System.Linq;
-
-// For revocation and REST queries using HTTPRequest.
 using System.Net;
-using System.Web;
-using System.Web.Compilation;
-
-// For string manipulations used in the template and string building.
+using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.RegularExpressions;
-
-// For mapping routes
+using System.Web;
+using System.Web.Compilation;
 using System.Web.Routing;
 using System.Web.SessionState;
 
-// Generated libraries for Google APIs
-using Google.Apis.Authentication.OAuth2;
-using Google.Apis.Authentication.OAuth2.DotNetOpenAuth;
 using Google.Apis.Oauth2.v2;
 using Google.Apis.Oauth2.v2.Data;
 using Google.Apis.Util;
 
-// For token verification
-using Microsoft.IdentityModel.Tokens.JWT;
 using Microsoft.IdentityModel.Tokens;
-
-using System.Collections;
-using System.IdentityModel.Tokens;
-using System.Security.Claims;
-using System.Security.Cryptography;
-using System.Security.Cryptography.X509Certificates;
-// For OAuth2
-using DotNetOpenAuth.Messaging;
-using DotNetOpenAuth.OAuth2;
-
-// For JSON parsing.
+using Microsoft.IdentityModel.Tokens.JWT;
 using Newtonsoft.Json;
 
 namespace VerifyToken
@@ -150,20 +134,20 @@ namespace VerifyToken
 
             // Use Tokeninfo to validate the user and the client.
             var tokeninfo_request = new Oauth2Service().Tokeninfo();
-            tokeninfo_request.Access_token = accessToken;
+            tokeninfo_request.AccessToken = accessToken;
 
             // Use Google as a trusted provider to validate the token.
             // Invalid values, including expired tokens, return 400
             Tokeninfo tokeninfo = null;
             try
             {
-                tokeninfo = tokeninfo_request.Fetch();
-                if (tokeninfo.Issued_to != CLIENT_ID){
+                tokeninfo = tokeninfo_request.Execute();
+                if (tokeninfo.IssuedTo != CLIENT_ID){
                     ats.message = "Access Token not meant for this app.";
                 }else{
                     ats.valid = true;
                     ats.message = "Valid Access Token.";
-                    ats.gplus_id = tokeninfo.User_id;
+                    ats.gplus_id = tokeninfo.UserId;
                 }
             }
             catch (Exception stve)

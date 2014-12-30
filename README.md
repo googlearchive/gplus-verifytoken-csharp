@@ -19,6 +19,7 @@ All tokens need to be verified on your server unless you know that they came dir
 
 ## Requirements ##
 * Visual Studio 2012 or later
+* .NET 4.5
 
 ## Usage ##
 1. Open the VerifyTokenDemo solution.

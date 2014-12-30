@@ -91,13 +91,12 @@
             verifyTokens: function () {
                 $.ajax({
                     type: 'POST',
-                    url: window.location.href + 'verify'
-                        + '?id_token=' + this.authResult.id_token
+                    url: window.location.origin + '/signin.ashx?id_token=' + this.authResult.id_token
                         + '&access_token=' + this.authResult.access_token,
                     success: function (result) {
                         console.log(result);
-                        $('#tokenResult').html('Token Verification Result:<br/>');
-                        $('#tokenResult').append(JSON.stringify(result, undefined, 2));
+                        $('#tokenResult').html('<h2>Token Verification Result:</h2>');
+                        $('#tokenResult').append('<pre>' + JSON.stringify(result, undefined, 2) + '</pre>');
                     },
                     processData: false,
                 });
