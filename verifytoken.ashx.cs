@@ -1,5 +1,5 @@
 ﻿/*
- * Copyright 2013 Google Inc. All Rights Reserved.
+ * Copyright Google Inc. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,14 @@
  * limitations under the License.
  */
 
+using Google.Apis.Oauth2.v2;
+using Google.Apis.Oauth2.v2.Data;
+using Google.Apis.Util;
+using Newtonsoft.Json;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IdentityModel.Selectors;
 using System.IdentityModel.Tokens;
 using System.IO;
 using System.Linq;
@@ -31,14 +36,6 @@ using System.Web.Compilation;
 using System.Web.Routing;
 using System.Web.SessionState;
 
-using Google.Apis.Oauth2.v2;
-using Google.Apis.Oauth2.v2.Data;
-using Google.Apis.Util;
-
-using Microsoft.IdentityModel.Tokens;
-using Microsoft.IdentityModel.Tokens.JWT;
-using Newtonsoft.Json;
-
 namespace VerifyToken
 {
     /// <summary>
@@ -51,18 +48,19 @@ namespace VerifyToken
     public class VerifyToken : IHttpHandler, IRequiresSessionState, IRouteHandler
     {
         // Get this from your app at https://code.google.com/apis/console
-        static public string CLIENT_ID = "YOUR_CLIENT_ID";
+        static public string CLIENT_ID = "YOUR_VALID_CLIENT_ID";
 
         // Values returned in the response
-        access_token_status ats = new access_token_status();
-        id_token_status its = new id_token_status();
+        private access_token_status ats = new access_token_status();
+
+        private id_token_status its = new id_token_status();
 
         /// <summary>
         /// Processes the request based on the path.
         /// </summary>
         /// <param name="context">Contains the request and response.</param>
-        public void ProcessRequest(HttpContext context){
-        
+        public void ProcessRequest(HttpContext context)
+        {
             // Get the code from the request POST body.
             string accessToken = context.Request.Params["access_token"];
             string idToken = context.Request.Params["id_token"];
@@ -70,37 +68,59 @@ namespace VerifyToken
             // Validate the ID token
             if (idToken != null)
             {
-                JWTSecurityToken token = new JWTSecurityToken(idToken);
-                JWTSecurityTokenHandler jwt = new JWTSecurityTokenHandler();
+                JwtSecurityToken token = new JwtSecurityToken(idToken);
+                JwtSecurityTokenHandler jsth = new JwtSecurityTokenHandler();
 
                 // Configure validation
                 Byte[][] certBytes = getCertBytes();
+                Dictionary<String, X509Certificate2> certificates = new Dictionary<String, X509Certificate2>();
+
                 for (int i = 0; i < certBytes.Length; i++)
                 {
                     X509Certificate2 certificate = new X509Certificate2(certBytes[i]);
-                    X509SecurityToken certToken = new X509SecurityToken(certificate);
+                    certificates.Add(certificate.Thumbprint, certificate);
+                }
+                {
+                    // Set up token validation
+                    TokenValidationParameters tvp = new TokenValidationParameters()
+                    {
+                        ValidateActor = false, // check the profile ID
 
-                    // Set up token validation 
-                    TokenValidationParameters tvp = new TokenValidationParameters();
-                    tvp.AllowedAudience = CLIENT_ID;
-                    tvp.SigningToken = certToken;
-                    tvp.ValidIssuer = "accounts.google.com";
+                        ValidateAudience = (CLIENT_ID != "YOUR_VALID_CLIENT_ID"), // check the client ID
+                        ValidAudience = CLIENT_ID,
 
-                    // Enable / disable tests                
-                    tvp.ValidateNotBefore = false;
-                    tvp.ValidateExpiration = true;
-                    tvp.ValidateSignature = true;
-                    tvp.ValidateIssuer = true;
+                        ValidateIssuer = true, // check token came from Google
+                        ValidIssuer = "accounts.google.com",
 
-                    // Account for clock skew. Look at current time when getting the message
-                    // "The token is expired" in try/catch block.
-                    // This is relative to GMT, for example, GMT-8 is:
-                    tvp.ClockSkewInSeconds = 3600 * 13;
+                        ValidateIssuerSigningKey = true,
+                        RequireSignedTokens = true,
+                        CertificateValidator = X509CertificateValidator.None,
+                        IssuerSigningKeyResolver = (s, securityToken, identifier, parameters) =>
+                        {
+                            return identifier.Select(x =>
+                            {
+                                // TODO: Consider returning null here if you have case sensitive JWTs.
+                                /*if (!certificates.ContainsKey(x.Id))
+                                {
+                                    return new X509SecurityKey(certificates[x.Id]);
+                                }*/
+                                if (certificates.ContainsKey(x.Id.ToUpper()))
+                                {
+                                    return new X509SecurityKey(certificates[x.Id.ToUpper()]);
+                                }
+                                return null;
+                            }).First(x => x != null);
+                        },
+                        ValidateLifetime = true,
+                        RequireExpirationTime = true,
+                        ClockSkew = TimeSpan.FromHours(13)
+                    };
 
                     try
                     {
                         // Validate using the provider
-                        ClaimsPrincipal cp = jwt.ValidateToken(token, tvp);
+                        SecurityToken validatedToken;
+                        ClaimsPrincipal cp = jsth.ValidateToken(idToken, tvp, out validatedToken);
                         if (cp != null)
                         {
                             its.valid = true;
@@ -112,7 +132,7 @@ namespace VerifyToken
                         // Multiple certificates are tested.
                         if (its.valid != true)
                         {
-                            its.message = "Invalid ID Token.";                           
+                            its.message = "Invalid ID Token.";
                         }
                         if (e.Message.IndexOf("The token is expired") > 0)
                         {
@@ -142,17 +162,20 @@ namespace VerifyToken
             try
             {
                 tokeninfo = tokeninfo_request.Execute();
-                if (tokeninfo.IssuedTo != CLIENT_ID){
+                if (tokeninfo.IssuedTo != CLIENT_ID)
+                {
                     ats.message = "Access Token not meant for this app.";
-                }else{
+                }
+                else
+                {
                     ats.valid = true;
                     ats.message = "Valid Access Token.";
                     ats.gplus_id = tokeninfo.UserId;
                 }
             }
             catch (Exception stve)
-            {                
-                ats.message = "Invalid Access Token.";
+            {
+                ats.message = "Invalid Access Token: " + stve.Message;
             }
 
             // Use the wrapper to return JSON
@@ -165,9 +188,9 @@ namespace VerifyToken
             context.Response.Write(JsonConvert.SerializeObject(tsr));
         }
 
-
         // Used for string parsing the Certificates from Google
         private const string beginCert = "-----BEGIN CERTIFICATE-----\\n";
+
         private const string endCert = "\\n-----END CERTIFICATE-----\\n";
 
         /// <summary>
@@ -184,7 +207,7 @@ namespace VerifyToken
             StreamReader reader = new StreamReader(request.GetResponse().GetResponseStream());
 
             string responseFromServer = reader.ReadToEnd();
-            
+
             String[] split = responseFromServer.Split(':');
 
             // There are two certificates returned from Google
@@ -194,7 +217,7 @@ namespace VerifyToken
             for (int i = 0; i < split.Length; i++)
             {
                 if (split[i].IndexOf(beginCert) > 0)
-                {                  
+                {
                     int startSub = split[i].IndexOf(beginCert);
                     int endSub = split[i].IndexOf(endCert) + endCert.Length;
                     certBytes[index] = utf8.GetBytes(split[i].Substring(startSub, endSub).Replace("\\n", "\n"));
@@ -204,11 +227,10 @@ namespace VerifyToken
             return certBytes;
         }
 
-
         /// <summary>
         /// Stores the result data for the ID token verification.
         /// </summary>
-        class id_token_status
+        private class id_token_status
         {
             public Boolean valid = false;
             public String gplus_id = null;
@@ -218,14 +240,17 @@ namespace VerifyToken
         /// <summary>
         /// Stores the result data for the access token verification.
         /// </summary>
-        class access_token_status
+        private class access_token_status
         {
             public Boolean valid = false;
             public String gplus_id = null;
             public String message = "";
         }
 
-        class token_status_wrapper
+        /// <summary>
+        /// Stores the result data for both token status responses.
+        /// </summary>
+        private class token_status_wrapper
         {
             public id_token_status id_token_status = null;
             public access_token_status access_token_status = null;
@@ -235,9 +260,8 @@ namespace VerifyToken
         /// Implements IRouteHandler interface for mapping routes to this
         /// IHttpHandler.
         /// </summary>
-        /// <param name="requestContext">Information about the request.
-        /// </param>
-        /// <returns></returns>
+        /// <param name="requestContext">Information about the request.</param>
+        /// <returns>An interface for the HTTP handler.</returns>
         public IHttpHandler GetHttpHandler(RequestContext
             requestContext)
         {
