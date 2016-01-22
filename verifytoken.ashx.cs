@@ -90,7 +90,7 @@ namespace VerifyToken
                         ValidAudience = CLIENT_ID,
 
                         ValidateIssuer = true, // check token came from Google
-                        ValidIssuer = "accounts.google.com",
+                        ValidIssuers = new List<string> { "accounts.google.com", "https://accounts.google.com" },
 
                         ValidateIssuerSigningKey = true,
                         RequireSignedTokens = true,
