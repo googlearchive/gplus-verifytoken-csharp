@@ -210,8 +210,9 @@ namespace VerifyToken
 
             String[] split = responseFromServer.Split(':');
 
-            // There are two certificates returned from Google
-            byte[][] certBytes = new byte[2][];
+            // There are n number of certificates returned from Google
+            int numberOfCerts = (split.Length - 1) <= 1 ? 1 : split.Length - 1;
+            byte[][] certBytes = new byte[numberOfCerts][];
             int index = 0;
             UTF8Encoding utf8 = new UTF8Encoding();
             for (int i = 0; i < split.Length; i++)
